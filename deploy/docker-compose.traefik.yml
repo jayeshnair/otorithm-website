@@ -1,0 +1,23 @@
+# Option A — an existing Traefik container fronts your apps.
+# Match `proxy`, `websecure` and `letsencrypt` to YOUR Traefik config.
+services:
+  otorithm-web:
+    image: ghcr.io/YOUR_GITHUB_USER/otorithm-web:latest   # or replace with `build: ..`
+    container_name: otorithm-web
+    restart: unless-stopped
+    networks: [proxy]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.routers.otorithm.rule=Host(`otorithm.com`) || Host(`www.otorithm.com`)
+      - traefik.http.routers.otorithm.entrypoints=websecure
+      - traefik.http.routers.otorithm.tls.certresolver=letsencrypt
+      - traefik.http.routers.otorithm.middlewares=otorithm-www
+      - traefik.http.middlewares.otorithm-www.redirectregex.regex=^https://www\.otorithm\.com/(.*)
+      - traefik.http.middlewares.otorithm-www.redirectregex.replacement=https://otorithm.com/$${1}
+      - traefik.http.middlewares.otorithm-www.redirectregex.permanent=true
+      - traefik.http.services.otorithm.loadbalancer.server.port=80
+
+networks:
+  proxy:
+    external: true

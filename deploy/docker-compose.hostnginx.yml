@@ -1,0 +1,10 @@
+# Option D — Nginx runs directly on the host and proxies to containers.
+# Bound to 127.0.0.1 on purpose: Docker-published ports bypass UFW,
+# so 0.0.0.0:8080 would be reachable from the internet.
+services:
+  otorithm-web:
+    image: ghcr.io/YOUR_GITHUB_USER/otorithm-web:latest   # or replace with `build: ..`
+    container_name: otorithm-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"

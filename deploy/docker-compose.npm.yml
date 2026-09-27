@@ -1,0 +1,13 @@
+# Option B — an existing Nginx Proxy Manager container fronts your apps.
+# Replace `npm_default` with NPM's network name (see `docker network ls`).
+# No ports are published: NPM reaches the container over the shared network.
+services:
+  otorithm-web:
+    image: ghcr.io/YOUR_GITHUB_USER/otorithm-web:latest   # or replace with `build: ..`
+    container_name: otorithm-web
+    restart: unless-stopped
+    networks: [npm_default]
+
+networks:
+  npm_default:
+    external: true

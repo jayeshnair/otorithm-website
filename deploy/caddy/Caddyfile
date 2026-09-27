@@ -1,0 +1,17 @@
+{
+	email hello@otorithm.com
+}
+
+otorithm.com {
+	encode zstd gzip
+	reverse_proxy otorithm-web:80
+}
+
+www.otorithm.com {
+	redir https://otorithm.com{uri} permanent
+}
+
+# Add your other apps here, e.g.:
+# app.example.com {
+# 	reverse_proxy other-container:3000
+# }
