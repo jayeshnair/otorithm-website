@@ -1,3 +1,5 @@
+/* Otorithm constellation engine. Exposes window.Constellation. */
+(function () {
 /**
  * Constellation — particle field that assembles into brand formations.
  * Framework-agnostic: new Constellation(canvas, { formation, ambient, fill }).
@@ -7,7 +9,7 @@
  * pixel grid inside those shapes, drawn as uniform 1px-outlined squares
  * snapped to the device pixel grid, so the formed mark reads crisp.
  */
-export const FORMATIONS = {
+const FORMATIONS = {
   // Ligature mark: path "M104 48 H16 V96 H60 V48" + stem "M84 20 V102", stroke 12, miter joins.
   ligature: [
     [10, 42, 94, 12],
@@ -39,13 +41,39 @@ export const FORMATIONS = {
     [18, 52, 88, 16],
     [10, 78, 96, 16],
   ],
+  // Forward-deployed / consulting: your team and ours, joined.
+  bridge: [
+    [12, 44, 32, 32],
+    [44, 54, 32, 12],
+    [76, 44, 32, 32, 'amber'],
+  ],
+  // Staff augmentation: a team grid with an added column.
+  grid: [
+    [12, 26, 18, 18], [38, 26, 18, 18], [64, 26, 18, 18], [90, 26, 18, 18, 'amber'],
+    [12, 51, 18, 18], [38, 51, 18, 18], [64, 51, 18, 18], [90, 51, 18, 18, 'amber'],
+    [12, 76, 18, 18], [38, 76, 18, 18], [64, 76, 18, 18], [90, 76, 18, 18, 'amber'],
+  ],
+  // Platform & data: services joined into a pipeline.
+  pipeline: [
+    [9, 51, 18, 18], [27, 56, 10, 8],
+    [37, 51, 18, 18], [55, 56, 10, 8],
+    [65, 51, 18, 18], [83, 56, 10, 8],
+    [93, 51, 18, 18, 'amber'],
+  ],
+  // Approach: an open delivery loop.
+  cycle: [
+    [18, 18, 60, 12],
+    [18, 18, 12, 84],
+    [18, 90, 84, 12],
+    [90, 42, 12, 60, 'amber'],
+  ],
 };
 
 const STROKE_UNITS = 12; // the mark's stroke width in unit space
 const PER_STROKE = 5; // particles across one stroke width
 const PAPER = 'rgb(246,245,241)';
 const AMBER = '#C27A2C';
-const PAPER_ALPHA = 0.9;
+const BASE_ALPHA = 0.82;
 const EASE = 0.06;
 const REPEL_RADIUS = 90;
 const REPEL_FORCE = 28;
@@ -70,13 +98,20 @@ function gridTargets(rects, scale) {
   return { targets: out, pitch };
 }
 
-export class Constellation {
+class Constellation {
   constructor(canvas, opts = {}) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.rects = FORMATIONS[opts.formation] || FORMATIONS.ligature;
     this.fill = opts.fill || 0.78;
+    // Cursor response: reach (px), push strength (px), swirl (0 = straight push), return speed
+    this.radius = opts.radius || REPEL_RADIUS;
+    this.force = opts.force || REPEL_FORCE;
+    this.swirl = opts.swirl || 0;
+    this.ease = opts.ease || EASE;
     this.ambientCount = opts.ambient || 0;
+    this.base = opts.color || PAPER;
+    this.accent = opts.accent || AMBER;
     this.reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.pointer = null;
     this.raf = 0;
@@ -99,7 +134,6 @@ export class Constellation {
     };
 
     this._layout();
-    this._seedAmbient();
 
     this.ro = new ResizeObserver(() => {
       this._layout();
@@ -142,6 +176,10 @@ export class Constellation {
     this.particles.length = targets.length;
     targets.forEach((t, i) => Object.assign(this.particles[i], t));
 
+    if (this.w > 0 && !this.ambientSeeded) {
+      this._seedAmbient();
+      this.ambientSeeded = true;
+    }
     if (this.reduce) this._snap();
   }
 
@@ -185,14 +223,18 @@ export class Constellation {
         const dx = tx - ptr.x;
         const dy = ty - ptr.y;
         const d = Math.hypot(dx, dy);
-        if (d < REPEL_RADIUS && d > 0.01) {
-          const push = (1 - d / REPEL_RADIUS) * REPEL_FORCE;
-          tx += (dx / d) * push;
-          ty += (dy / d) * push;
+        if (d < this.radius && d > 0.01) {
+          const k = 1 - d / this.radius;
+          const push = k * k * this.force + k * this.force * 0.35;
+          const nx = dx / d;
+          const ny = dy / d;
+          // Radial push plus a tangential swirl around the pointer
+          tx += nx * push - ny * push * this.swirl;
+          ty += ny * push + nx * push * this.swirl;
         }
       }
-      p.x += (tx - p.x) * EASE;
-      p.y += (ty - p.y) * EASE;
+      p.x += (tx - p.x) * this.ease;
+      p.y += (ty - p.y) * this.ease;
     }
     for (const a of this.ambient) {
       a.x += a.vx;
@@ -213,8 +255,8 @@ export class Constellation {
     ctx.lineWidth = 1;
 
     // Ambient: dim, drifting, individually faded.
-    ctx.strokeStyle = PAPER;
-    ctx.fillStyle = PAPER;
+    ctx.strokeStyle = this.base;
+    ctx.fillStyle = this.base;
     for (const a of this.ambient) {
       ctx.globalAlpha = a.alpha;
       const x = Math.round(a.x);
@@ -234,8 +276,8 @@ export class Constellation {
       }
       ctx.stroke();
     };
-    batch(false, PAPER, PAPER_ALPHA);
-    batch(true, AMBER, 1);
+    batch(false, this.base, BASE_ALPHA);
+    batch(true, this.accent, 1);
     ctx.globalAlpha = 1;
   }
 
@@ -248,3 +290,6 @@ export class Constellation {
     window.removeEventListener('blur', this._onLeave);
   }
 }
+
+window.Constellation = Constellation;
+})();

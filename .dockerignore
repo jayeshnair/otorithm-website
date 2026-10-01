@@ -1,0 +1,9 @@
+dist
+artifact
+.git
+.github
+deploy
+*.zip
+__pycache__
+.DS_Store
+source

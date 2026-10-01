@@ -18,7 +18,7 @@ services:
     networks: [edge]
 
   otorithm-web:
-    image: ghcr.io/YOUR_GITHUB_USER/otorithm-web:latest   # or replace with `build: ..`
+    image: ghcr.io/jayeshnair/otorithm-web:latest   # or replace with `build: ..`
     container_name: otorithm-web
     restart: unless-stopped
     networks: [edge]
