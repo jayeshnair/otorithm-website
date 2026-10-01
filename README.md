@@ -1,45 +1,58 @@
-# otorithm-site
+# otorithm.com
 
-Marketing site for otorithm.com: React + TypeScript + Vite + Tailwind CSS v4, Ligature brand.
+Static, multi-page website for Otorithm. No framework and no npm: a small Python script turns
+`content.py` into plain HTML pages, served by Nginx in Docker.
 
-## Run
+## Edit and preview
 
 ```bash
-npm install
-npm run dev      # http://localhost:5173
-npm run build    # type-check + production build into dist/
+# edit copy in content.py (styles in assets/styles.css)
+python3 build.py                                  # writes dist/
+python3 -m http.server 8080 --directory dist      # http://localhost:8080
 ```
 
-## Edit content
+## Pages
 
-All copy, links and team details live in `src/content.ts`.
+| Page | File |
+|---|---|
+| Home | `index.html` |
+| Services overview + 6 service pages | `services.html`, `services/*.html` |
+| Industries | `industries.html` |
+| Approach (delivery loop, models, security, time zones) | `approach.html` |
+| Work (engagement blueprints) | `work.html` |
+| Insights + 3 articles | `insights.html`, `insights/*.html` |
+| About, Careers, Contact, Privacy, 404 | `about.html` … `404.html` |
 
-Before launch, replace:
-- `CAL_LINK` with your Cal.com booking URL
-- `LINKEDIN_URL` with your company LinkedIn page
-- The service claims ("two weeks", "72 hours", "replacement guarantee") if delivery can't back them yet
-- Set up hello@otorithm.com and careers@otorithm.com mailboxes
+`sitemap.xml` and `robots.txt` are generated too.
 
-## Structure
+## Before launch
 
-```
-src/
-  content.ts                 all site copy
-  lib/constellation.js       particle engine (framework-agnostic) + .d.ts types
-  components/                Navbar, Hero, Services, HowWeWork, WhyUs, Careers, Contact, Footer,
-                             LigatureMark (mark + lockup), Constellation (engine wrapper), GhostLink
-  index.css                  Tailwind v4 @theme tokens + brand type/components
-```
+- `SITE['form_endpoint']` in `content.py`: set a form backend URL (Formspree, Basin or your own API)
+  so the contact form posts. Left empty, the form composes the message for the visitor to email.
+- Create the contact@ and careers@ mailboxes.
+- Check every claim in `content.py` against how you actually operate (timelines, security practices,
+  response times, open roles).
+- Add a LinkedIn link to the footer once the company page exists.
 
-## Deploy (Docker on a VPS)
+## Hero video
 
-- `Dockerfile` builds the site and serves `dist/` from `nginx:alpine` (config in `docker/nginx.conf`).
-- `deploy/` holds one compose file per reverse-proxy setup: Traefik, Nginx Proxy Manager, Caddy, or host Nginx.
-- `.github/workflows/deploy.yml` builds the image on every push to `main`, pushes it to GHCR, and runs `docker compose pull && up -d` on the VPS.
+`assets/hero.mp4` is a generated placeholder. To use an AI-generated clip, follow
+`tools/ai-video-prompts.md`, then run `tools/prepare_hero_video.sh clip.mp4 pingpong` and rebuild.
 
-Local smoke test:
+## Deploy (Docker on the VPS)
+
+The `Dockerfile` runs `build.py` in a Python stage and copies `dist/` into `nginx:alpine`.
+`deploy/` holds compose files for Traefik, Nginx Proxy Manager, Caddy or host Nginx, and
+`.github/workflows/deploy.yml` builds the image on every push to `main`, publishes it to
+`ghcr.io/jayeshnair/otorithm-web`, and restarts it on the VPS once these repository secrets exist
+(Settings → Secrets and variables → Actions):
+
+- `VPS_HOST`: the VPS IP address
+- `VPS_SSH_KEY`: a private key for the `deploy` user on the VPS
+
+Until the secrets are set, the workflow builds and publishes the image and skips the VPS step.
 
 ```bash
 docker build -t otorithm-web .
-docker run --rm -p 8080:80 otorithm-web   # http://localhost:8080
+docker run --rm -p 8080:80 otorithm-web      # http://localhost:8080
 ```

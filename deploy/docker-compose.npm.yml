@@ -3,7 +3,7 @@
 # No ports are published: NPM reaches the container over the shared network.
 services:
   otorithm-web:
-    image: ghcr.io/YOUR_GITHUB_USER/otorithm-web:latest   # or replace with `build: ..`
+    image: ghcr.io/jayeshnair/otorithm-web:latest   # or replace with `build: ..`
     container_name: otorithm-web
     restart: unless-stopped
     networks: [npm_default]
