@@ -260,7 +260,7 @@ def footer(p):
       </ul></div>
     </div>
     <div class="foot-legal">
-      <span>© 2026 {esc(C.SITE['legal'])}. Otorithm is a brand of {esc(C.SITE['legal'])}.</span>
+      <span>© 2026 {esc(C.SITE['legal'])}. All rights reserved.</span>
       <a href="{rel(p, 'privacy.html')}">Privacy notice</a>
     </div>
   </div>
@@ -360,7 +360,6 @@ def org_node():
     ]
     node = {
         '@type': 'Organization', '@id': ORG_ID, 'name': S['name'], 'legalName': S['legal'],
-        'alternateName': 'System One Technologies',
         'url': DOMAIN + '/', 'email': S['email'],
         'logo': {'@type': 'ImageObject', '@id': DOMAIN + '/#logo', 'url': DOMAIN + '/assets/icons/logo-512.png',
                  'contentUrl': DOMAIN + '/assets/icons/logo-512.png', 'width': 512, 'height': 512, 'caption': 'Otorithm'},
@@ -1200,8 +1199,8 @@ def pages():
            'day. Email contact@otorithm.com or use the form.',
            page_contact, 'contact', type='ContactPage', crumbs=[('Contact', 'contact.html')]),
         pg('privacy.html', 'Privacy Notice | Otorithm',
-           'How System One Technologies Private Limited (Otorithm) handles personal data sent through otorithm.com, '
-           "in line with GDPR and India's DPDP Act.",
+           f"How {C.SITE['legal']} handles personal data sent through otorithm.com, in line with GDPR and "
+           "India's DPDP Act.",
            page_privacy, None, crumbs=[('Privacy notice', 'privacy.html')]),
         pg('404.html', 'Page not found | Otorithm', 'This page does not exist.', page_404, None,
            robots='noindex, follow', sitemap=False, markdown=False),
@@ -1417,7 +1416,7 @@ def page_markdown(m, body):
     art = m.get('article')
     if art:
         front += [f"published: {art['published']}", f"author: Otorithm Engineering"]
-    front += ['source: Otorithm (otorithm.com), System One Technologies Private Limited', '---', '']
+    front += [f"source: Otorithm (otorithm.com), {C.SITE['legal']}", '---', '']
     md = Markdown(m['path']).convert(body)
     if art and art.get('takeaways'):
         pass  # takeaways are part of the article markup and come through the converter
@@ -1472,7 +1471,7 @@ def llms_txt(built):
     profiles = f"- Official profiles: {', '.join(S['same_as'])}\n" if S.get('same_as') else ''
     return f'''# Otorithm
 
-> Otorithm is an AI-native software engineering consultancy headquartered in Gurugram, India, and a brand of {S['legal']}. It builds AI products and agents, modernizes legacy systems and workflows, and provides forward-deployed engineering pods and senior staff augmentation for product companies and enterprises in India, Europe and North America. Senior engineers lead every engagement, and AI is used throughout delivery, with a named engineer reviewing and owning every change.
+> Otorithm is an AI-native software engineering consultancy ({S['legal']}) headquartered in Gurugram, India. It builds AI products and agents, modernizes legacy systems and workflows, and provides forward-deployed engineering pods and senior staff augmentation for product companies and enterprises in India, Europe and North America. Senior engineers lead every engagement, and AI is used throughout delivery, with a named engineer reviewing and owning every change.
 
 Key facts:
 
