@@ -1469,6 +1469,7 @@ def llms_txt(built):
     art_lines = '\n'.join(link(f"insights/{a['slug']}.html", a['title'], a['summary']) for a in C.ARTICLES)
     models = '; '.join(f"{v['name']} ({v['term']})" for k, v in C.MODELS.items())
     inds = ', '.join(i['name'] for i in C.INDUSTRIES)
+    profiles = f"- Official profiles: {', '.join(S['same_as'])}\n" if S.get('same_as') else ''
     return f'''# Otorithm
 
 > Otorithm is an AI-native software engineering consultancy headquartered in Gurugram, India, and a brand of {S['legal']}. It builds AI products and agents, modernizes legacy systems and workflows, and provides forward-deployed engineering pods and senior staff augmentation for product companies and enterprises in India, Europe and North America. Senior engineers lead every engagement, and AI is used throughout delivery, with a named engineer reviewing and owning every change.
@@ -1477,7 +1478,7 @@ Key facts:
 
 - Website: {DOMAIN}/ (every page also has a Markdown version: replace .html with .md; the home page is {DOMAIN}/index.md)
 - Contact: {S['email']} (new work), {S['careers_email']} (careers); hours {S['hours']}
-- Headquarters and delivery centre: {S['city']}
+{profiles}- Headquarters and delivery centre: {S['city']}
 - Services: {', '.join(C.SERVICES[s]['name'] for _, slugs in C.SERVICE_GROUPS for s in slugs)}
 - AI automation: AI agents and automated workflows for document intake, approvals, data entry, reconciliation and support triage
 - Engagement models: {models}

@@ -26,7 +26,7 @@ SITE = {
     # They become schema.org `sameAs` links, which let search engines and AI models tie this site
     # to the same company everywhere it appears. Add the LinkedIn page URL as soon as it is live,
     # e.g. 'https://www.linkedin.com/company/otorithm/'. The first LinkedIn URL also shows in the footer.
-    'same_as': [],
+    'same_as': ['https://www.linkedin.com/company/otorithm/'],
     # Verification codes from Google Search Console and Bing Webmaster Tools: paste only the
     # content="..." value of the meta tag each one gives you. Empty values are left out.
     'verification': {'google': '', 'bing': ''},
