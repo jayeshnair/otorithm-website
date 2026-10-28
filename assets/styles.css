@@ -4,6 +4,15 @@
  * the particle constellation is the only imagery.
  * Deliberately light-only: every colour is set explicitly on :root.
  */
+/* Sora (SIL Open Font License, assets/fonts/OFL.txt), self-hosted: Latin subset, weights 300 to 600.
+   Served from our own domain: faster first paint than a third-party font CDN, and no visitor data sent to one. */
+@font-face {
+  font-family: 'Sora';
+  src: url('fonts/sora-latin.woff2') format('woff2');
+  font-weight: 300 600;
+  font-style: normal;
+  font-display: swap;
+}
 :root {
   /* Surfaces */
   --bg: #ffffff;          /* white: page background */
@@ -436,6 +445,10 @@ a.tag:hover { border-color: var(--accent); color: var(--fg); }
 .prose ol li { position: relative; padding-left: 34px; counter-increment: n; }
 .prose ol li::before { content: counter(n, decimal-leading-zero); position: absolute; left: 0; top: 0.15em; font-size: 13px; font-weight: 600; color: var(--accent-text); font-variant-numeric: tabular-nums; }
 .prose blockquote { margin: 32px 0; padding-left: 24px; border-left: 2px solid var(--accent); color: var(--fg); font-size: 21px; line-height: 1.5; letter-spacing: -0.01em; }
+.prose .takeaways { margin: 0 0 40px; padding: 24px 28px; background: var(--surface); border-left: 2px solid var(--accent); border-radius: 0 6px 6px 0; }
+.prose .takeaways .label { margin: 0 0 14px; }
+.prose .takeaways ul { margin: 0; gap: 8px; }
+.prose .takeaways li { font-size: 16px; line-height: 1.6; color: var(--fg); }
 .aside { display: flex; flex-direction: column; gap: 28px; align-self: start; }
 @media (min-width: 1000px) { .aside { position: sticky; top: calc(var(--nav-h) + 32px); } }
 

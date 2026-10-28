@@ -6,20 +6,35 @@ Builds the Otorithm website into ./dist (static HTML, no dependencies beyond Pyt
   python3 build.py --artifact   # also writes artifact/index.html for the Claude preview
 
 Copy lives in content.py; styles and scripts in assets/.
+
+Besides the HTML pages, the build writes what search engines and AI assistants read:
+sitemap.xml (with lastmod), robots.txt, llms.txt, llms-full.txt, a Markdown copy of every page
+(<page>.md), an RSS feed for Insights, the web app manifest, /.well-known/security.txt and the
+IndexNow key file. Page dates for the sitemap are tracked in lastmod.json: a page's date moves
+only when its content changes. Run the build locally and commit lastmod.json with your edits.
 """
+import datetime
 import hashlib
 import html
 import json
 import os
 import posixpath
+import re
 import shutil
 import sys
+from html.parser import HTMLParser
+from urllib.parse import urljoin
 
 import content as C
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 DIST = os.path.join(ROOT, 'dist')
 ASSETS = ['styles.css', 'site.js', 'constellation.js', 'favicon.svg']
+ASSET_DIRS = ['images', 'og', 'icons', 'fonts']   # copied as-is into dist/assets/
+LASTMOD = os.path.join(ROOT, 'lastmod.json')
+TODAY = datetime.date.today().isoformat()
+DOMAIN = C.SITE['domain']
+ROBOTS_DEFAULT = 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1'
 
 
 def video_assets():
@@ -52,7 +67,38 @@ def asset_versions():
 
 VERSIONS = {}
 
-ARROW = '<span class="arrow" aria-hidden="true">→</span>'
+
+def file_ver(path):
+    """Short content hash for any file under the repo root, for cache-busting query strings."""
+    with open(os.path.join(ROOT, path), 'rb') as f:
+        return hashlib.sha1(f.read()).hexdigest()[:8]
+
+
+def page_url(p):
+    """Canonical absolute URL of a built page."""
+    return DOMAIN + '/' + ('' if p == 'index.html' else p)
+
+
+def md_path(p):
+    """The Markdown twin of a page: about.html -> about.md, index.html -> index.md."""
+    return p[:-len('.html')] + '.md'
+
+
+def og_image(m):
+    """Absolute URL of the page's share image: its own if one was rendered, otherwise the default."""
+    key = m.get('og') or 'default'
+    path = f'assets/og/{key}.png'
+    if not os.path.exists(os.path.join(ROOT, path)):
+        path = 'assets/og/default.png'
+    return f'{DOMAIN}/{path}?v={file_ver(path)}'
+
+
+def human_date(iso):
+    d = datetime.date.fromisoformat(iso)
+    return f'{d.day} {d.strftime("%B %Y")}'
+
+
+ARROW ='<span class="arrow" aria-hidden="true">→</span>'
 COPY_ICON = (
     '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">'
     '<rect x="3.5" y="3.5" width="7.5" height="7.5" rx="1.2"></rect>'
@@ -193,6 +239,8 @@ def footer(p):
         for l, h in [('About', 'about.html'), ('Approach', 'approach.html'), ('Industries', 'industries.html'),
                      ('Work', 'work.html'), ('Insights', 'insights.html'), ('Careers', 'careers.html')]
     )
+    linkedin = next((u for u in C.SITE.get('same_as', []) if 'linkedin.com' in u), '')
+    linkedin = f'<li><a href="{esc(linkedin)}" rel="me noopener" target="_blank">LinkedIn</a></li>' if linkedin else ''
     return f'''<footer class="footer">
   <div class="wrap">
     <div class="foot-grid">
@@ -208,6 +256,7 @@ def footer(p):
         <li>{esc(C.SITE['email'])}</li>
         <li>{esc(C.SITE['careers_email'])}</li>
         <li>{esc(C.SITE['city'])}</li>
+        {linkedin}
       </ul></div>
     </div>
     <div class="foot-legal">
@@ -232,7 +281,7 @@ def cta_band(p, title='What are we building?', body='Tell us about the problem. 
 </section>'''
 
 
-def page_hero(p, label, title, lead, formation=None, actions='', crumb=None, label_href=None):
+def page_hero(p, label, title, lead, formation=None, actions='', crumb=None, label_href=None, h1_prefix=None):
     if crumb:
         lab = '<div class="crumb">' + '<span class="sep" aria-hidden="true">/</span>'.join(
             f'<a class="label" href="{rel(p, h)}">{esc(t)}</a>' if h else f'<span class="label">{esc(t)}</span>'
@@ -247,7 +296,7 @@ def page_hero(p, label, title, lead, formation=None, actions='', crumb=None, lab
   <div class="wrap {grid_cls}">
     <div class="stack">
       {lab}
-      <h1 class="h1">{esc(title)}</h1>
+      <h1 class="h1">{f'<span class="sr-only">{esc(h1_prefix)}: </span>' if h1_prefix else ''}{esc(title)}</h1>
       <p class="lead">{esc(lead)}</p>
       {act}
     </div>
@@ -262,6 +311,13 @@ def sec_head(label, title, body=None, h='h2'):
   <div class="stack-sm"><p class="label">{esc(label)}</p><h2 class="{h}">{esc(title)}</h2></div>
   {b}
 </div>'''
+
+
+def faq_list(faqs):
+    return ''.join(
+        f'<details><summary>{esc(q)}<span class="plus" aria-hidden="true"></span></summary><div class="answer"><p class="small">{esc(a)}</p></div></details>'
+        for q, a in faqs
+    )
 
 
 def models_table(keys):
@@ -289,25 +345,171 @@ def article_rows(p, articles):
 # ---------------------------------------------------------------------------
 # Page shell
 # ---------------------------------------------------------------------------
-def shell(p, title, desc, body, active=None, extra_head='', artifact_index=False):
-    canonical = C.SITE['domain'] + '/' + ('' if p == 'index.html' else p)
+# ---------------------------------------------------------------------------
+# Structured data (schema.org JSON-LD), one connected @graph per page
+# ---------------------------------------------------------------------------
+ORG_ID = DOMAIN + '/#organization'
+SITE_ID = DOMAIN + '/#website'
+
+
+def org_node():
+    S = C.SITE
+    services = [
+        {'@type': 'Offer', 'itemOffered': service_ref(s)}
+        for _, slugs in C.SERVICE_GROUPS for s in slugs
+    ]
+    node = {
+        '@type': 'Organization', '@id': ORG_ID, 'name': S['name'], 'legalName': S['legal'],
+        'alternateName': 'System One Technologies',
+        'url': DOMAIN + '/', 'email': S['email'],
+        'logo': {'@type': 'ImageObject', '@id': DOMAIN + '/#logo', 'url': DOMAIN + '/assets/icons/logo-512.png',
+                 'contentUrl': DOMAIN + '/assets/icons/logo-512.png', 'width': 512, 'height': 512, 'caption': 'Otorithm'},
+        'image': {'@id': DOMAIN + '/#logo'},
+        'description': S['tagline'],
+        'slogan': C.HOME['title'],
+        'address': {'@type': 'PostalAddress', 'addressLocality': 'Gurugram', 'addressRegion': 'Haryana', 'addressCountry': 'IN'},
+        'areaServed': S['area_served'],
+        'knowsAbout': S['knows_about'],
+        'contactPoint': [
+            {'@type': 'ContactPoint', 'contactType': 'sales', 'email': S['email'], 'availableLanguage': ['English'],
+             'areaServed': S['area_served'], 'url': page_url('contact.html')},
+            {'@type': 'ContactPoint', 'contactType': 'recruiting', 'email': S['careers_email'], 'availableLanguage': ['English'],
+             'url': page_url('careers.html')},
+        ],
+        'hasOfferCatalog': {'@type': 'OfferCatalog', 'name': 'Otorithm services', 'itemListElement': services},
+    }
+    if S.get('same_as'):
+        node['sameAs'] = S['same_as']
+    return node
+
+
+def website_node():
+    return {'@type': 'WebSite', '@id': SITE_ID, 'url': DOMAIN + '/', 'name': 'Otorithm', 'alternateName': 'otorithm.com',
+            'description': C.SITE['tagline'], 'publisher': {'@id': ORG_ID}, 'inLanguage': 'en'}
+
+
+def service_ref(slug):
+    """A self-contained pointer to a service: enough to stand alone on pages that do not describe it."""
+    url = page_url(svc_path(slug))
+    return {'@type': 'Service', '@id': url + '#service', 'name': C.SERVICES[slug]['name'], 'url': url}
+
+
+def faq_node_items(faqs, url):
+    return [{'@type': 'Question', '@id': f'{url}#faq-{i}', 'name': q,
+             'acceptedAnswer': {'@type': 'Answer', 'text': a}} for i, (q, a) in enumerate(faqs, 1)]
+
+
+def service_node(slug):
+    S = C.SERVICES[slug]
+    url = page_url(svc_path(slug))
+    return {'@type': 'Service', '@id': url + '#service', 'name': S['name'], 'serviceType': S['name'],
+            'description': S['short'], 'url': url, 'provider': {'@id': ORG_ID}, 'areaServed': C.SITE['area_served'],
+            'category': svc_group(slug), 'image': og_image({'og': f'service-{slug}'}),
+            'hasOfferCatalog': {'@type': 'OfferCatalog', 'name': S['deliver_title'],
+                                'itemListElement': [{'@type': 'Offer', 'itemOffered': {'@type': 'Service', 'name': t, 'description': d}}
+                                                    for t, d in S['deliver']]}}
+
+
+def structured_data(p, m):
+    url = page_url(p)
+    graph = [org_node(), website_node()]
+    page = {'@type': m.get('type', 'WebPage'), '@id': url + '#webpage', 'url': url, 'name': m['title'],
+            'description': m['desc'], 'isPartOf': {'@id': SITE_ID}, 'inLanguage': 'en',
+            'primaryImageOfPage': {'@type': 'ImageObject', 'url': og_image(m), 'width': 1200, 'height': 630},
+            'dateModified': m['lastmod']}
+    if p in ('index.html', 'about.html'):
+        page['about'] = {'@id': ORG_ID}
+    if p == 'about.html':
+        page['mainEntity'] = {'@id': ORG_ID}
+    crumbs = m.get('crumbs') or []
+    if crumbs:
+        trail = [('Home', 'index.html')] + crumbs
+        graph.append({'@type': 'BreadcrumbList', '@id': url + '#breadcrumb', 'itemListElement': [
+            {'@type': 'ListItem', 'position': i, 'name': n, 'item': page_url(h)} for i, (n, h) in enumerate(trail, 1)]})
+        page['breadcrumb'] = {'@id': url + '#breadcrumb'}
+    faqs = m.get('faqs')
+    if faqs:
+        page['@type'] = [page['@type'], 'FAQPage'] if page['@type'] != 'FAQPage' else 'FAQPage'
+        page['mainEntity'] = faq_node_items(faqs, url)
+    if m.get('service'):
+        graph.append(service_node(m['service']))
+        page['about'] = {'@id': url + '#service'}
+    if p == 'services.html':
+        page['mainEntity'] = {'@type': 'ItemList', 'itemListElement': [
+            {'@type': 'ListItem', 'position': i, 'item': {'@id': page_url(svc_path(s)) + '#service'}}
+            for i, s in enumerate([s for _, slugs in C.SERVICE_GROUPS for s in slugs], 1)]}
+        graph += [service_node(s) for _, slugs in C.SERVICE_GROUPS for s in slugs]
+    if p == 'insights.html':
+        page['mainEntity'] = {'@type': 'ItemList', 'itemListElement': [
+            {'@type': 'ListItem', 'position': i, 'url': page_url(f"insights/{a['slug']}.html"), 'name': a['title']}
+            for i, a in enumerate(C.ARTICLES, 1)]}
+    art = m.get('article')
+    if art:
+        graph.append({
+            '@type': 'BlogPosting', '@id': url + '#article', 'headline': art['title'], 'description': art['summary'],
+            'datePublished': art['published'], 'dateModified': art['updated'], 'inLanguage': 'en',
+            'author': {'@type': 'Organization', 'name': 'Otorithm Engineering', 'url': page_url('about.html'), 'parentOrganization': {'@id': ORG_ID}},
+            'publisher': {'@id': ORG_ID}, 'image': og_image(m), 'mainEntityOfPage': {'@id': url + '#webpage'},
+            'articleSection': art['topic'], 'keywords': art.get('keywords', []),
+            'wordCount': len(re.sub('<[^>]+>', ' ', art['html']).split()),
+            'about': [service_ref(s) for s in art['services']],
+            'isAccessibleForFree': True,
+        })
+        page['mainEntity'] = {'@id': url + '#article'}
+        page['datePublished'] = art['published']
+    graph.append(page)
+    return json.dumps({'@context': 'https://schema.org', '@graph': graph}, ensure_ascii=False, separators=(',', ':')).replace('</', '<\\/')
+
+
+def shell(p, m, body, extra_head='', artifact_index=False):
+    title, desc, active = m['title'], m['desc'], m.get('active')
+    canonical = page_url(p)
     v = VERSIONS
     a = lambda name: rel(p, f'assets/{name}') + f'?v={v[name]}'
+    f = lambda path: rel(p, path) + f'?v={file_ver(path)}'
+    img = og_image(m)
+    art = m.get('article')
+    og_type = 'article' if art else 'website'
+    article_meta = (f'<meta property="article:published_time" content="{art["published"]}">\n'
+                    f'<meta property="article:modified_time" content="{art["updated"]}">\n'
+                    f'<meta property="article:section" content="{esc(art["topic"])}">\n'
+                    f'<meta property="article:author" content="Otorithm Engineering">\n') if art else ''
+    verify = ''.join(
+        f'<meta name="{n}" content="{esc(c)}">\n'
+        for n, c in (('google-site-verification', C.SITE['verification'].get('google')),
+                     ('msvalidate.01', C.SITE['verification'].get('bing'))) if c
+    )
+    md_link = (f'<link rel="alternate" type="text/markdown" href="{rel(p, md_path(p))}" title="{esc(title)} (Markdown)">\n'
+               if m.get('markdown', True) else '')
     head = f'''<title>{esc('Otorithm Website' if artifact_index else title)}</title>
 <meta name="description" content="{esc(desc)}">
-<meta name="theme-color" content="#ffffff">
+<meta name="robots" content="{esc(m.get('robots') or ROBOTS_DEFAULT)}">
 <link rel="canonical" href="{canonical}">
-<meta property="og:type" content="website">
+{md_link}<link rel="alternate" type="application/rss+xml" href="{rel(p, 'insights/feed.xml')}" title="Otorithm Insights">
+<meta property="og:type" content="{og_type}">
 <meta property="og:site_name" content="Otorithm">
+<meta property="og:locale" content="en_US">
 <meta property="og:title" content="{esc(title)}">
 <meta property="og:description" content="{esc(desc)}">
 <meta property="og:url" content="{canonical}">
-<meta name="twitter:card" content="summary">
+<meta property="og:image" content="{img}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="{esc(title)}">
+{article_meta}<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{esc(title)}">
+<meta name="twitter:description" content="{esc(desc)}">
+<meta name="twitter:image" content="{img}">
+<meta name="twitter:image:alt" content="{esc(title)}">
+{verify}<meta name="theme-color" content="#ffffff">
+<meta name="author" content="Otorithm">
 <link rel="icon" type="image/svg+xml" href="{a('favicon.svg')}">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600&amp;display=swap">
+<link rel="icon" type="image/png" sizes="48x48" href="{f('assets/icons/favicon-48.png')}">
+<link rel="apple-touch-icon" href="{f('assets/icons/apple-touch-icon.png')}">
+<link rel="manifest" href="{rel(p, 'manifest.json')}">
+<link rel="preload" href="{rel(p, 'assets/fonts/sora-latin.woff2')}" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="{a('styles.css')}">
+<script type="application/ld+json">{structured_data(p, m)}</script>
 {extra_head}'''
     page = f'''{header(p, active)}
 <main id="main">
@@ -361,12 +563,6 @@ def page_home(p):
         for i in C.INDUSTRIES
     )
     why = ''.join(f'<div class="feature"><h3 class="h4">{esc(t)}</h3><p class="small">{esc(d)}</p></div>' for t, d in H['why'])
-    org = {
-        '@context': 'https://schema.org', '@type': 'Organization', 'name': 'Otorithm',
-        'legalName': C.SITE['legal'], 'url': C.SITE['domain'], 'email': C.SITE['email'],
-        'address': {'@type': 'PostalAddress', 'addressLocality': 'Gurugram', 'addressRegion': 'Haryana', 'addressCountry': 'IN'},
-        'description': C.SITE['tagline'],
-    }
     pills = ''.join(f'<a class="pill" href="{rel(p, h)}">{esc(t)}</a>' for t, h in H['pills'])
     hv = C.SITE['hero_video']
     asset = lambda name: rel(p, f'assets/{name}') + f'?v={VERSIONS[name]}'
@@ -377,12 +573,12 @@ def page_home(p):
                  'data-radius="150" data-force="62" data-swirl="0.45" data-ease="0.075"></canvas></div>') if hv['particles'] else ''
     hero_cls = 'hero has-particles' if hv['particles'] else 'hero'
     body = f'''<section class="{hero_cls}" style="--video-opacity: {hv['opacity']}">
-  <video class="hero-media" id="hero-video" src="{v_src}" poster="{v_poster}" muted loop playsinline preload="auto" aria-hidden="true" tabindex="-1"></video>
+  <video class="hero-media" id="hero-video" src="{v_src}" poster="{v_poster}" muted loop playsinline preload="metadata" aria-hidden="true" tabindex="-1"></video>
   <div class="hero-scrim" aria-hidden="true"></div>
   <div class="wrap hero-inner">
     <div class="hero-copy">
-      <p class="label">{esc(H['label'])}</p>
-      <h1 class="display">{esc(H['title'])}</h1>
+      <p class="label" aria-hidden="true">{esc(H['label'])}</p>
+      <h1 class="display"><span class="sr-only">Otorithm: {esc(H['label'])}. </span>{esc(H['title'])}</h1>
       <div class="agent">
         <p class="agent-intro" aria-hidden="true">{esc(H['agent_intro'][0])}<br>{esc(H['agent_intro'][1])}</p>
         <p class="typed" data-typewriter="{esc(H['typed'])}"><span class="sr-only">{esc(H['typed'])}</span><span class="typed-text" aria-hidden="true"></span><span class="cursor" aria-hidden="true"></span></p>
@@ -442,13 +638,22 @@ def page_home(p):
   </div>
 </section>
 
+<section class="section ruled" id="faq">
+  <div class="wrap split">
+    <div class="stack-sm"><p class="label">FAQ</p><h2 class="h2">Otorithm in brief.</h2>
+      <p class="body">Straight answers to the questions we hear most about who we are and how we work.</p></div>
+    <div class="faq">{faq_list(H['faq'])}</div>
+  </div>
+</section>
+
 {cta_band(p)}'''
     # One full-width image band at the top of each main section, in page order
     for key in ['home-different', 'home-services', 'home-engage', 'home-industries', 'home-why', 'home-insights']:
         marker = '<section class="section ruled">'
         assert marker in body, key
         body = body.replace(marker, f'<section class="section ruled has-band">\n  {band(p, key)}', 1)
-    extra = f'<script type="application/ld+json">{json.dumps(org)}</script>'
+    # The video poster is the largest element in the first viewport: fetch it early
+    extra = f'<link rel="preload" as="image" href="{v_poster}" fetchpriority="high">'
     return body, extra
 
 
@@ -518,10 +723,7 @@ def page_service(p, slug):
   <p class="small">{esc(C.MODELS[k]['what'])}</p></div>'''
         for k in S['models']
     )
-    faqs = ''.join(
-        f'<details><summary>{esc(q)}<span class="plus" aria-hidden="true"></span></summary><div class="answer"><p class="small">{esc(a)}</p></div></details>'
-        for q, a in S['faqs']
-    )
+    faqs = faq_list(S['faqs'])
     related = ''.join(
         f'''<a class="row" href="{rel(p, svc_path(r))}">
   <div class="stack-sm"><p class="label">{esc(svc_group(r))}</p><h3 class="h3">{esc(C.SERVICES[r]['name'])}</h3></div>
@@ -532,7 +734,7 @@ def page_service(p, slug):
     actions = f'<a href="{rel(p, "contact.html")}" class="btn">Talk to us</a>{ghost("#how", "How it runs")}'
     body = page_hero(
         p, None, S['title'], S['lead'], formation=S['formation'], actions=actions,
-        crumb=[('Services', 'services.html'), (S['name'], None)],
+        crumb=[('Services', 'services.html'), (S['name'], None)], h1_prefix=S['name'],
     ) + f'''
 <section class="section ruled">
   <div class="wrap">
@@ -720,16 +922,22 @@ def page_article(p, art):
     rel_svcs = ''.join(
         f'<li><a href="{rel(p, svc_path(s))}">{esc(C.SERVICES[s]["name"])}</a></li>' for s in art['services']
     )
+    updated = (f' · Updated <time datetime="{art["updated"]}">{human_date(art["updated"])}</time>'
+               if art['updated'] != art['published'] else '')
+    takeaways = ''
+    if art.get('takeaways'):
+        takeaways = ('<aside class="takeaways" aria-label="Key takeaways"><p class="label">Key takeaways</p><ul>'
+                     + ''.join(f'<li>{esc(t)}</li>' for t in art['takeaways']) + '</ul></aside>')
     body = f'''<section class="article-head">
   <div class="wrap stack">
     <div class="crumb"><a class="label" href="{rel(p, 'insights.html')}">Insights</a><span class="sep" aria-hidden="true">/</span><span class="label">{esc(art['topic'])}</span></div>
     <h1 class="h1">{esc(art['title'])}</h1>
     <p class="lead">{esc(art['summary'])}</p>
-    <p class="meta">Otorithm Engineering · {art['minutes']} min read</p>
+    <p class="meta">Otorithm Engineering · <time datetime="{art['published']}">{human_date(art['published'])}</time>{updated} · {art['minutes']} min read</p>
   </div>
 </section>
 <div class="wrap article-layout">
-  <article class="prose">{art['html']}</article>
+  <article class="prose">{takeaways}{art['html']}</article>
   <aside class="aside" aria-label="Related">
     <div class="foot-col"><h2>Related services</h2><ul>{rel_svcs}</ul></div>
     <div class="stack-sm"><p class="h4">Working on something like this?</p><p class="small">Talk to an engineer about your situation.</p>
@@ -742,12 +950,7 @@ def page_article(p, art):
     {article_rows(p, others)}
   </div>
 </section>'''
-    ld = {
-        '@context': 'https://schema.org', '@type': 'Article', 'headline': art['title'],
-        'description': art['summary'], 'author': {'@type': 'Organization', 'name': 'Otorithm'},
-        'publisher': {'@type': 'Organization', 'name': 'Otorithm'},
-    }
-    return body, f'<script type="application/ld+json">{json.dumps(ld)}</script>'
+    return body, ''
 
 
 def page_about(p):
@@ -948,30 +1151,417 @@ def page_404(p):
 # Build
 # ---------------------------------------------------------------------------
 def pages():
+    """Every page with its search metadata. Titles stay within ~60 characters and descriptions
+    within ~160, so search results show them whole."""
+    def pg(path, title, desc, fn, active=None, **m):
+        return dict(path=path, title=title, desc=desc, fn=fn, active=active, **m)
+
     out = [
-        ('index.html', 'Otorithm | AI-native engineering consultancy',
-         'Otorithm is an AI-native engineering consultancy: AI-first product engineering, forward-deployed engineers, legacy modernization, platform engineering and staff augmentation.',
-         page_home, 'home'),
-        ('services.html', 'Services | Otorithm',
-         'AI-first product engineering, forward-deployed engineering, AI modernization of legacy workflows, platform and data engineering, AI consulting and staff augmentation.',
-         page_services, 'services'),
+        pg('index.html', 'Otorithm | AI-Native Software Engineering Consultancy',
+           'Otorithm builds AI products and agents, modernizes legacy systems and provides forward-deployed '
+           'engineers and staff augmentation for India, Europe and the US.',
+           page_home, 'home', faqs=C.HOME['faq']),
+        pg('services.html', 'AI Engineering & Software Development Services | Otorithm',
+           'AI product engineering, platform and data engineering, legacy modernization, AI consulting, '
+           'forward-deployed engineers and staff augmentation.',
+           page_services, 'services', type='CollectionPage', crumbs=[('Services', 'services.html')]),
     ]
     for slug, S in C.SERVICES.items():
-        out.append((svc_path(slug), f"{S['name']} | Otorithm", S['short'], lambda p, s=slug: page_service(p, s), 'services'))
+        out.append(pg(svc_path(slug), S['seo_title'], S['seo_desc'], lambda p, s=slug: page_service(p, s), 'services',
+                      crumbs=[('Services', 'services.html'), (S['name'], svc_path(slug))],
+                      faqs=S['faqs'], service=slug, og=f'service-{slug}'))
     out += [
-        ('industries.html', 'Industries | Otorithm', 'Engineering and AI for fintech, financial services, marketplaces, B2B SaaS, logistics and healthcare operations.', page_industries, 'industries'),
-        ('approach.html', 'Approach | Otorithm', 'How Otorithm delivers software with AI in the loop: the delivery loop, principles, engagement models, security and time zones.', page_approach, 'approach'),
-        ('work.html', 'Work | Otorithm', 'Engagement blueprints: how Otorithm engagements run, week by week, and what you have at the end.', page_work, 'work'),
-        ('insights.html', 'Insights | Otorithm', 'Field notes on AI engineering, legacy modernization and engagement models from Otorithm engineers.', page_insights, 'insights'),
-        ('about.html', 'About | Otorithm', 'Otorithm is an AI-native software engineering consultancy for product companies and enterprises in India, Europe and North America.', page_about, 'about'),
-        ('careers.html', 'Careers | Otorithm', 'Senior engineering roles at Otorithm: backend, AI, forward-deployed, data, frontend and platform engineering.', page_careers, 'careers'),
-        ('contact.html', 'Contact | Otorithm', 'Tell Otorithm what you are building. An engineer will reply.', page_contact, 'contact'),
-        ('privacy.html', 'Privacy notice | Otorithm', 'How Otorithm handles personal data collected through otorithm.com.', page_privacy, None),
-        ('404.html', 'Page not found | Otorithm', 'This page does not exist.', page_404, None),
+        pg('industries.html', 'Industries: Fintech, Banking, SaaS & Logistics | Otorithm',
+           'AI and software engineering for fintech and payments, banking and financial services, marketplaces, '
+           'B2B SaaS, logistics and healthcare operations.',
+           page_industries, 'industries', crumbs=[('Industries', 'industries.html')]),
+        pg('approach.html', 'How We Deliver Software with AI in the Loop | Otorithm',
+           'How Otorithm delivers software with AI in the loop: the delivery loop, principles, engagement models, '
+           'security, data protection and time-zone overlap.',
+           page_approach, 'approach', crumbs=[('Approach', 'approach.html')]),
+        pg('work.html', 'Engagement Blueprints: How Our Projects Run | Otorithm',
+           'Week-by-week engagement blueprints: AI pilot to production, document digitization, legacy replacement, '
+           'enterprise-ready SaaS, AI copilots and team extension.',
+           page_work, 'work', crumbs=[('Work', 'work.html')]),
+        pg('insights.html', 'Insights on AI Engineering & Modernization | Otorithm',
+           'Field notes on AI engineering, LLM evals, legacy modernization and engagement models, written by '
+           'Otorithm engineers.',
+           page_insights, 'insights', type='CollectionPage', crumbs=[('Insights', 'insights.html')]),
+        pg('about.html', 'About Otorithm | AI-Native Engineering Consultancy',
+           'Otorithm is an AI-native software engineering consultancy for product companies and enterprises in '
+           'India, Europe and North America, headquartered in Gurugram.',
+           page_about, 'about', type='AboutPage', crumbs=[('About', 'about.html')]),
+        pg('careers.html', 'Careers: Senior Engineering Roles in India | Otorithm',
+           'Senior engineering roles at Otorithm in Gurugram and remote across India: backend, AI, forward-deployed, '
+           'data, frontend and platform engineers.',
+           page_careers, 'careers', crumbs=[('Careers', 'careers.html')]),
+        pg('contact.html', 'Contact Otorithm | Talk to an Engineer',
+           'Tell Otorithm what you are building. An engineer, not a sales team, replies, usually within one business '
+           'day. Email contact@otorithm.com or use the form.',
+           page_contact, 'contact', type='ContactPage', crumbs=[('Contact', 'contact.html')]),
+        pg('privacy.html', 'Privacy Notice | Otorithm',
+           'How System One Technologies Private Limited (Otorithm) handles personal data sent through otorithm.com, '
+           "in line with GDPR and India's DPDP Act.",
+           page_privacy, None, crumbs=[('Privacy notice', 'privacy.html')]),
+        pg('404.html', 'Page not found | Otorithm', 'This page does not exist.', page_404, None,
+           robots='noindex, follow', sitemap=False, markdown=False),
     ]
     for a in C.ARTICLES:
-        out.append((f"insights/{a['slug']}.html", f"{a['title']} | Otorithm", a['summary'], lambda p, art=a: page_article(p, art), 'insights'))
+        path = f"insights/{a['slug']}.html"
+        title = a['title'] if len(a['title']) > 49 else f"{a['title']} | Otorithm"
+        out.append(pg(path, title, a['summary'], lambda p, art=a: page_article(p, art), 'insights',
+                      crumbs=[('Insights', 'insights.html'), (a['title'], path)], article=a, og=f"insight-{a['slug']}"))
+    too_long = [(m['path'], len(m['title']), len(m['desc'])) for m in out if len(m['title']) > 70 or len(m['desc']) > 160]
+    assert not too_long, f'Shorten these titles (max 70) or descriptions (max 160): {too_long}'
     return out
+
+
+# ---------------------------------------------------------------------------
+# Markdown twins of each page, for AI assistants and LLM crawlers
+# ---------------------------------------------------------------------------
+class _Node:
+    __slots__ = ('tag', 'attrs', 'children')
+
+    def __init__(self, tag, attrs):
+        self.tag, self.attrs, self.children = tag, dict(attrs), []
+
+
+class _Tree(HTMLParser):
+    VOID = {'br', 'img', 'input', 'meta', 'link', 'hr', 'source', 'wbr', 'col', 'area'}
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.root = _Node('root', [])
+        self.stack = [self.root]
+
+    def handle_starttag(self, tag, attrs):
+        node = _Node(tag, attrs)
+        self.stack[-1].children.append(node)
+        if tag not in self.VOID:
+            self.stack.append(node)
+
+    def handle_startendtag(self, tag, attrs):
+        self.stack[-1].children.append(_Node(tag, attrs))
+
+    def handle_endtag(self, tag):
+        for i in range(len(self.stack) - 1, 0, -1):
+            if self.stack[i].tag == tag:
+                del self.stack[i:]
+                return
+
+    def handle_data(self, data):
+        self.stack[-1].children.append(data)
+
+
+class Markdown:
+    """Small HTML-to-Markdown converter for this site's own markup (not a general converter).
+    Decorative and interactive parts (canvases, video, forms, aria-hidden elements, section labels)
+    are dropped; copy-to-clipboard buttons become the value they copy; links become absolute."""
+    SKIP = {'script', 'style', 'svg', 'canvas', 'video', 'form', 'select', 'textarea', 'noscript', 'figure', 'template', 'iframe', 'img', 'input'}
+    SKIP_CLASSES = {'label', 'crumb', 'num', 'skip', 'plus', 'arrow', 'video-toggle', 'chev', 'band'}
+    INLINE = {'a', 'strong', 'b', 'em', 'i', 'span', 'code', 'time', 'small', 'abbr', 'br', 'button', 'sup', 'sub', 'mark'}
+    HEADINGS = {'h1': 1, 'h2': 2, 'h3': 3, 'h4': 4, 'h5': 5, 'h6': 6}
+
+    def __init__(self, page_path):
+        self.base = page_url(page_path)
+
+    def convert(self, html_text):
+        t = _Tree()
+        t.feed(html_text)
+        out = '\n\n'.join(b for b in self.blocks(t.root) if b.strip())
+        out = re.sub(r'\)\[', ') · [', out)          # adjacent links (pills, tags) get a separator
+        return re.sub(r'\n{3,}', '\n\n', out).strip() + '\n'
+
+    def skipped(self, n):
+        if n.tag in self.SKIP or n.attrs.get('aria-hidden') == 'true' or n.attrs.get('hidden') is not None and 'hidden' in n.attrs:
+            return True
+        cls = set((n.attrs.get('class') or '').split())
+        if n.tag == 'button' and 'data-copy' in n.attrs:
+            return False
+        if n.tag == 'button':
+            return True
+        if cls & self.SKIP_CLASSES and 'sr-only' not in cls:
+            return n.tag != 'p' or 'label' in cls
+        return False
+
+    def href(self, h):
+        if not h:
+            return ''
+        if h.startswith(('http://', 'https://', 'mailto:', 'tel:')):
+            return h
+        return urljoin(self.base, h).replace('/index.html', '/')
+
+    def is_block(self, n):
+        return isinstance(n, _Node) and n.tag not in self.INLINE
+
+    def has_block(self, n):
+        return any(isinstance(c, _Node) and (self.is_block(c) and not self.skipped(c) or self.has_block(c)) for c in n.children)
+
+    def inline(self, n):
+        if isinstance(n, str):
+            return re.sub(r'\s+', ' ', n)
+        if self.skipped(n):
+            return ''
+        if n.tag == 'br':
+            return '\n'
+        if n.tag == 'button':   # copy-to-clipboard button: its visible label, e.g. the email address
+            label = re.sub(r'\s+', ' ', ''.join(self.inline(c) for c in n.children)).strip()
+            return ' ' + (label or n.attrs.get('data-copy', '')) + ' '
+        inner = ''.join(self.inline(c) for c in n.children)
+        if n.tag in ('strong', 'b'):
+            return f'**{inner.strip()}**' if inner.strip() else ''
+        if n.tag in ('em', 'i'):
+            return f'_{inner.strip()}_' if inner.strip() else ''
+        if n.tag == 'code':
+            return f'`{inner}`'
+        if n.tag == 'a':
+            text, url = inner.strip(), self.href(n.attrs.get('href'))
+            return f'[{text}]({url})' if text and url else text
+        if self.is_block(n):
+            return ' ' + inner + ' '
+        return inner
+
+    def text(self, n):
+        return re.sub(r'[ \t]+', ' ', self.inline(n)).strip()
+
+    def blocks(self, n):
+        out, run = [], []
+
+        def flush():
+            s = re.sub(r'[ \t]+', ' ', ''.join(run)).strip()
+            if s:
+                out.append(s)
+            run.clear()
+
+        kids = [c for c in n.children if not (isinstance(c, str) and not c.strip())]
+        for i, c in enumerate(kids):
+            if isinstance(c, str) or not self.is_block(c) and not (c.tag == 'a' and self.has_block(c)):
+                run.append(self.inline(c))
+                continue
+            flush()
+            if c.tag == 'p' and 'label' in (c.attrs.get('class') or '').split():
+                nxt = next((k for k in kids[i + 1:] if isinstance(k, _Node)), None)
+                if nxt is None or nxt.tag not in self.HEADINGS:
+                    t = ''.join(self.inline(x) for x in c.children).strip()
+                    if t:
+                        out.append(f'**{t}**')
+                continue
+            out.extend(self.block(c))
+        flush()
+        return out
+
+    def block(self, n):
+        if self.skipped(n):
+            return []
+        tag = n.tag
+        if tag in self.HEADINGS:
+            t = self.text(n)
+            return [f"{'#' * self.HEADINGS[tag]} {t}"] if t else []
+        if tag == 'a':   # a card-style link wrapping a heading and text
+            url = self.href(n.attrs.get('href'))
+            inner = self.blocks(n)
+            for i, b in enumerate(inner):
+                if b.startswith('#'):
+                    hashes, _, t = b.partition(' ')
+                    inner[i] = f'{hashes} [{t}]({url})'
+                    return inner
+            return [f'[{inner[0]}]({url})'] + inner[1:] if inner else []
+        if tag in ('ul', 'ol'):
+            items = [c for c in n.children if isinstance(c, _Node) and c.tag == 'li' and not self.skipped(c)]
+            lines = []
+            for i, li in enumerate(items, 1):
+                parts = []
+                for b in self.blocks(li):
+                    parts.append(f"**{b.lstrip('#').strip()}**:" if b.startswith('#') else b.replace('\n', ' '))
+                item = ' '.join(parts).rstrip(':')
+                lines.append(f"{f'{i}.' if tag == 'ol' else '-'} {item}")
+            return ['\n'.join(lines)] if lines else []
+        if tag == 'table':
+            rows = []
+            for tr in self.find(n, 'tr'):
+                cells = [self.text(c).replace('|', '\\|') for c in tr.children if isinstance(c, _Node) and c.tag in ('th', 'td')]
+                if cells:
+                    rows.append(cells)
+            if not rows:
+                return []
+            w = max(len(r) for r in rows)
+            rows = [r + [''] * (w - len(r)) for r in rows]
+            lines = ['| ' + ' | '.join(rows[0]) + ' |', '|' + '---|' * w] + ['| ' + ' | '.join(r) + ' |' for r in rows[1:]]
+            return ['\n'.join(lines)]
+        if tag == 'details':
+            summary = next((c for c in n.children if isinstance(c, _Node) and c.tag == 'summary'), None)
+            q = self.text(summary) if summary else ''
+            rest = [b for c in n.children if isinstance(c, _Node) and c.tag != 'summary' for b in self.block(c)]
+            return ([f'**{q}**'] if q else []) + rest
+        if tag == 'blockquote':
+            return ['\n'.join('> ' + line for b in self.blocks(n) for line in b.split('\n'))]
+        if tag == 'tr':
+            return [' · '.join(self.text(c) for c in n.children if isinstance(c, _Node))]
+        return self.blocks(n)
+
+    def find(self, n, tag):
+        for c in n.children:
+            if isinstance(c, _Node):
+                if c.tag == tag:
+                    yield c
+                else:
+                    yield from self.find(c, tag)
+
+
+def page_markdown(m, body):
+    url = page_url(m['path'])
+    front = [
+        '---', f"title: {json.dumps(m['title'], ensure_ascii=False)}", f"description: {json.dumps(m['desc'], ensure_ascii=False)}",
+        f'url: {url}', f"last_updated: {m['lastmod']}",
+    ]
+    art = m.get('article')
+    if art:
+        front += [f"published: {art['published']}", f"author: Otorithm Engineering"]
+    front += ['source: Otorithm (otorithm.com), System One Technologies Private Limited', '---', '']
+    md = Markdown(m['path']).convert(body)
+    if art and art.get('takeaways'):
+        pass  # takeaways are part of the article markup and come through the converter
+    return '\n'.join(front) + md
+
+
+# ---------------------------------------------------------------------------
+# Files for crawlers and assistants
+# ---------------------------------------------------------------------------
+AI_CRAWLERS = [
+    # Search engines (their AI answers draw on these indexes)
+    'Googlebot', 'Bingbot', 'Applebot', 'DuckDuckBot', 'YandexBot',
+    # AI search and assistants fetching pages to answer and cite
+    'OAI-SearchBot', 'ChatGPT-User', 'Claude-SearchBot', 'Claude-User', 'PerplexityBot', 'Perplexity-User',
+    'DuckAssistBot', 'MistralAI-User', 'meta-externalfetcher', 'Meta-WebIndexer', 'YouBot',
+    # Model training (lets future models know who Otorithm is)
+    'GPTBot', 'ClaudeBot', 'Google-Extended', 'Applebot-Extended', 'meta-externalagent', 'Amazonbot',
+    'CCBot', 'cohere-ai', 'Bytespider',
+]
+
+
+def robots_txt():
+    agents = '\n'.join(f'User-agent: {a}' for a in AI_CRAWLERS)
+    return f'''# otorithm.com: search engines and AI assistants are welcome to crawl, index, cite and learn from this site.
+# A Markdown copy of every page sits next to it (index.md, services.md, ...), listed in /llms.txt.
+
+User-agent: *
+Content-Signal: search=yes, ai-input=yes, ai-train=yes
+Allow: /
+
+# Named explicitly so the intent is unambiguous for each crawler
+{agents}
+Allow: /
+
+Sitemap: {DOMAIN}/sitemap.xml
+'''
+
+
+def llms_txt(built):
+    S, H = C.SITE, C.HOME
+    by = {m['path']: m for m in built}
+
+    def link(path, title=None, note=None):
+        m = by[path]
+        return f"- [{title or m['title'].split(' | ')[0]}]({DOMAIN}/{md_path(path)}): {note or m['desc']}"
+
+    svc_lines = '\n'.join(link(svc_path(s), C.SERVICES[s]['name'], C.SERVICES[s]['short'])
+                          for _, slugs in C.SERVICE_GROUPS for s in slugs)
+    art_lines = '\n'.join(link(f"insights/{a['slug']}.html", a['title'], a['summary']) for a in C.ARTICLES)
+    models = '; '.join(f"{v['name']} ({v['term']})" for k, v in C.MODELS.items())
+    inds = ', '.join(i['name'] for i in C.INDUSTRIES)
+    profiles = f"- Official profiles: {', '.join(S['same_as'])}\n" if S.get('same_as') else ''
+    return f'''# Otorithm
+
+> Otorithm is an AI-native software engineering consultancy headquartered in Gurugram, India, and a brand of {S['legal']}. It builds AI products and agents, modernizes legacy systems and workflows, and provides forward-deployed engineering pods and senior staff augmentation for product companies and enterprises in India, Europe and North America. Senior engineers lead every engagement, and AI is used throughout delivery, with a named engineer reviewing and owning every change.
+
+Key facts:
+
+- Website: {DOMAIN}/ (every page also has a Markdown version: replace .html with .md; the home page is {DOMAIN}/index.md)
+- Contact: {S['email']} (new work), {S['careers_email']} (careers); hours {S['hours']}
+{profiles}- Headquarters and delivery centre: {S['city']}
+- Services: {', '.join(C.SERVICES[s]['name'] for _, slugs in C.SERVICE_GROUPS for s in slugs)}
+- AI automation: AI agents and automated workflows for document intake, approvals, data entry, reconciliation and support triage
+- Engagement models: {models}
+- Industries: {inds}
+- Markets: India, Europe and the UK, North America, Middle East, with working-hour overlap agreed per engagement
+- Data and IP: code in the client's repositories and cloud; client data never trains models; NDAs and IP assignment in every contract; GDPR and India DPDP Act aligned
+
+## Company
+
+{link('index.html', 'Home', 'What Otorithm does, how it is different, services, engagement models, industries and an FAQ.')}
+{link('about.html', 'About')}
+{link('approach.html', 'Approach')}
+{link('industries.html', 'Industries')}
+{link('work.html', 'Engagement blueprints')}
+{link('contact.html', 'Contact')}
+
+## Services
+
+{link('services.html', 'All services', 'The six services, a guide to choosing one, and engagement models compared.')}
+{svc_lines}
+
+## Insights
+
+{art_lines}
+
+## Optional
+
+{link('careers.html', 'Careers')}
+{link('privacy.html', 'Privacy notice')}
+- [Everything above in one file]({DOMAIN}/llms-full.txt): the full text of every page, in Markdown.
+'''
+
+
+def rss_xml(built):
+    items = ''
+    for m in [m for m in built if m.get('article')]:
+        a, url = m['article'], page_url(m['path'])
+        pub = datetime.datetime.fromisoformat(a['published']).strftime('%a, %d %b %Y 09:00:00 +0530')
+        items += (f'  <item>\n    <title>{esc(a["title"])}</title>\n    <link>{url}</link>\n    <guid isPermaLink="true">{url}</guid>\n'
+                  f'    <pubDate>{pub}</pubDate>\n    <category>{esc(a["topic"])}</category>\n    <description>{esc(a["summary"])}</description>\n  </item>\n')
+    return f'''<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+<channel>
+  <title>Otorithm Insights</title>
+  <link>{page_url('insights.html')}</link>
+  <atom:link href="{DOMAIN}/insights/feed.xml" rel="self" type="application/rss+xml"/>
+  <description>Field notes on AI engineering, modernization and engagement models from Otorithm engineers.</description>
+  <language>en</language>
+{items}</channel>
+</rss>
+'''
+
+
+def sitemap_xml(built):
+    urls = ''.join(
+        f"  <url><loc>{page_url(m['path'])}</loc><lastmod>{m['lastmod']}</lastmod></url>\n"
+        for m in built if m.get('sitemap', True)
+    )
+    return f'<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n{urls}</urlset>\n'
+
+
+def manifest_json():
+    return json.dumps({
+        'name': 'Otorithm', 'short_name': 'Otorithm', 'description': C.SITE['tagline'], 'start_url': '/',
+        'display': 'browser', 'background_color': '#ffffff', 'theme_color': '#ffffff',
+        'icons': [{'src': '/assets/icons/icon-192.png', 'sizes': '192x192', 'type': 'image/png'},
+                  {'src': '/assets/icons/icon-512.png', 'sizes': '512x512', 'type': 'image/png'},
+                  {'src': '/assets/favicon.svg', 'sizes': 'any', 'type': 'image/svg+xml'}],
+    }, indent=2) + '\n'
+
+
+def security_txt():
+    expires = (datetime.date.today() + datetime.timedelta(days=365)).isoformat()
+    return (f"Contact: mailto:{C.SITE['email']}\nExpires: {expires}T00:00:00.000Z\nPreferred-Languages: en\n"
+            f"Canonical: {DOMAIN}/.well-known/security.txt\n")
+
+
+def load_lastmod():
+    try:
+        with open(LASTMOD) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
 
 
 def main():
@@ -983,32 +1573,60 @@ def main():
     for name in ASSETS + video_assets():
         os.makedirs(os.path.dirname(os.path.join(DIST, 'assets', name)), exist_ok=True)
         shutil.copy(os.path.join(ROOT, 'assets', name), os.path.join(DIST, 'assets', name))
-    images = os.path.join(ROOT, 'assets', 'images')
-    if os.path.isdir(images):
-        shutil.copytree(images, os.path.join(DIST, 'assets', 'images'), ignore=shutil.ignore_patterns('.gitkeep'))
+    for d in ASSET_DIRS:
+        src = os.path.join(ROOT, 'assets', d)
+        if os.path.isdir(src):
+            shutil.copytree(src, os.path.join(DIST, 'assets', d), ignore=shutil.ignore_patterns('.gitkeep', '*.tmp.*'))
 
-    built = []
-    for path, title, desc, fn, active in pages():
-        body, extra = fn(path)
-        dest = os.path.join(DIST, path)
+    def write(rel_path, text):
+        dest = os.path.join(DIST, rel_path)
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         with open(dest, 'w', encoding='utf-8') as f:
-            f.write(shell(path, title, desc, body, active, extra))
-        built.append(path)
-        if artifact and path == 'index.html':
+            f.write(text)
+
+    # Render bodies first, so each page's lastmod can follow changes to its own content
+    known, dates, built = load_lastmod(), {}, []
+    for m in pages():
+        body, extra = m['fn'](m['path'])
+        digest = hashlib.sha1((m['title'] + m['desc'] + body).encode()).hexdigest()[:16]
+        prev = known.get(m['path'], {})
+        m['lastmod'] = prev['date'] if prev.get('hash') == digest else TODAY
+        if m.get('article'):   # an article's own updated date wins when it is later
+            m['lastmod'] = max(m['lastmod'], m['article']['updated']) if prev.get('hash') == digest else max(TODAY, m['article']['updated'])
+        dates[m['path']] = {'hash': digest, 'date': m['lastmod']}
+        write(m['path'], shell(m['path'], m, body, extra))
+        if m.get('markdown', True):
+            write(md_path(m['path']), page_markdown(m, body))
+        built.append(m)
+        if artifact and m['path'] == 'index.html':
             os.makedirs(os.path.join(ROOT, 'artifact'), exist_ok=True)
             with open(os.path.join(ROOT, 'artifact', 'index.html'), 'w', encoding='utf-8') as f:
-                f.write(shell(path, title, desc, body, active, extra, artifact_index=True))
+                f.write(shell(m['path'], m, body, extra, artifact_index=True))
+    if dates != known:
+        try:
+            with open(LASTMOD, 'w') as f:
+                json.dump(dates, f, indent=1, sort_keys=True)
+                f.write('\n')
+        except OSError:
+            pass  # read-only checkout (e.g. a Docker build): keep the computed dates for this build only
 
-    urls = ''.join(
-        f"  <url><loc>{C.SITE['domain']}/{'' if p == 'index.html' else p}</loc></url>\n"
-        for p in built if p != '404.html'
-    )
-    with open(os.path.join(DIST, 'sitemap.xml'), 'w') as f:
-        f.write(f'<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n{urls}</urlset>\n')
-    with open(os.path.join(DIST, 'robots.txt'), 'w') as f:
-        f.write(f"User-agent: *\nAllow: /\nSitemap: {C.SITE['domain']}/sitemap.xml\n")
-    print(f'Built {len(built)} pages into dist/')
+    write('sitemap.xml', sitemap_xml(built))
+    write('robots.txt', robots_txt())
+    write('llms.txt', llms_txt(built))
+    order = [m for m in built if m.get('markdown', True)]
+    full = f"# Otorithm: full site content\n\n> Every page of {DOMAIN}, in Markdown. Generated {TODAY}. Index: {DOMAIN}/llms.txt\n\n"
+    full += '\n\n---\n\n'.join(page_markdown(m, m['fn'](m['path'])[0]) for m in order)
+    write('llms-full.txt', full)
+    write('insights/feed.xml', rss_xml(built))
+    write('manifest.json', manifest_json())
+    write('.well-known/security.txt', security_txt())
+    key = C.SITE.get('indexnow_key')
+    if key:
+        write(f'{key}.txt', key + '\n')
+    ico = os.path.join(ROOT, 'assets', 'icons', 'favicon.ico')
+    if os.path.exists(ico):
+        shutil.copy(ico, os.path.join(DIST, 'favicon.ico'))
+    print(f'Built {len(built)} pages (+ Markdown twins, sitemap, robots, llms.txt, feed) into dist/')
 
 
 if __name__ == '__main__':

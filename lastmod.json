@@ -1,0 +1,82 @@
+{
+ "404.html": {
+  "date": "2026-10-28",
+  "hash": "117c51df81262047"
+ },
+ "about.html": {
+  "date": "2026-10-28",
+  "hash": "41f74b9b01a9b349"
+ },
+ "approach.html": {
+  "date": "2026-10-28",
+  "hash": "7f304187e023a6fa"
+ },
+ "careers.html": {
+  "date": "2026-10-28",
+  "hash": "97b5e593bda2f6ac"
+ },
+ "contact.html": {
+  "date": "2026-10-28",
+  "hash": "a3c6387a6cbc2075"
+ },
+ "index.html": {
+  "date": "2026-10-28",
+  "hash": "0f80a11e6c0e8c9b"
+ },
+ "industries.html": {
+  "date": "2026-10-28",
+  "hash": "e65ada19da26a501"
+ },
+ "insights.html": {
+  "date": "2026-10-28",
+  "hash": "e2e643b6018d1df6"
+ },
+ "insights/evals-before-demos.html": {
+  "date": "2026-10-28",
+  "hash": "6cd7a960b5ada3f8"
+ },
+ "insights/forward-deployed-engineering-vs-staff-augmentation.html": {
+  "date": "2026-10-28",
+  "hash": "f99ebe3562427997"
+ },
+ "insights/modernizing-legacy-workflows-with-ai.html": {
+  "date": "2026-10-28",
+  "hash": "ea47fe4b1abdf813"
+ },
+ "privacy.html": {
+  "date": "2026-10-28",
+  "hash": "e497589312dd8ee7"
+ },
+ "services.html": {
+  "date": "2026-10-28",
+  "hash": "cf60f196b66b9148"
+ },
+ "services/ai-consulting.html": {
+  "date": "2026-10-28",
+  "hash": "3341577a07822e1a"
+ },
+ "services/ai-first-engineering.html": {
+  "date": "2026-10-28",
+  "hash": "caaf77a756b7e099"
+ },
+ "services/forward-deployed-engineering.html": {
+  "date": "2026-10-28",
+  "hash": "61351b91aac3d797"
+ },
+ "services/legacy-modernization.html": {
+  "date": "2026-10-28",
+  "hash": "9558cd4be8eafdeb"
+ },
+ "services/platform-engineering.html": {
+  "date": "2026-10-28",
+  "hash": "468db22c729bb20a"
+ },
+ "services/staff-augmentation.html": {
+  "date": "2026-10-28",
+  "hash": "317328d826909f88"
+ },
+ "work.html": {
+  "date": "2026-10-28",
+  "hash": "2a5311c6eccea568"
+ }
+}

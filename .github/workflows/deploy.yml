@@ -52,3 +52,12 @@ jobs:
             docker compose pull otorithm-web
             docker compose up -d otorithm-web
             docker image prune -f
+
+      # Bing, Yandex and other IndexNow engines recrawl changed pages within minutes
+      # (Bing also feeds ChatGPT search and Copilot). Google reads the sitemap instead.
+      - name: Submit changed pages to IndexNow
+        if: env.VPS_HOST != ''
+        continue-on-error: true
+        run: |
+          sleep 30
+          python3 tools/indexnow.py
