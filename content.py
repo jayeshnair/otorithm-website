@@ -8,7 +8,7 @@ are inserted as written.
 SITE = {
     'name': 'Otorithm',
     'domain': 'https://otorithm.com',
-    'legal': 'System One Technologies Private Limited',
+    'legal': 'Otorithm Technologies Private Limited',
     'email': 'contact@otorithm.com',
     'careers_email': 'careers@otorithm.com',
     'city': 'Gurugram, Haryana, India',
@@ -451,7 +451,7 @@ HOME = {
     'diff_title': 'AI is in how we work, not only in what we build.',
     'diff_body': 'Most firms add AI to the product and keep delivering the old way. We rebuilt our delivery around it. Agents draft, test and document under the direction of senior engineers, and every output passes the same review gates as hand-written work. You get the speed of AI with an engineer accountable for every change.',
     'faq': [
-        ('What is Otorithm?', 'Otorithm is an AI-native software engineering consultancy headquartered in Gurugram, India. It designs, builds and modernizes production software for product companies and enterprises in India, Europe and North America, with senior engineers leading every engagement and AI used throughout delivery. Otorithm is a brand of System One Technologies Private Limited.'),
+        ('What is Otorithm?', 'Otorithm is an AI-native software engineering consultancy headquartered in Gurugram, India. It designs, builds and modernizes production software for product companies and enterprises in India, Europe and North America, with senior engineers leading every engagement and AI used throughout delivery. Its legal name is Otorithm Technologies Private Limited.'),
         ('What services does Otorithm offer?', 'Six services in three groups. Build: AI-First Product Engineering and Platform & Data Engineering. Transform: AI Modernization of Legacy Workflows and AI Strategy & Deployed Consulting. Extend: Forward-Deployed Engineering and Staff Augmentation.'),
         ('Does Otorithm build AI automation and AI agents?', 'Yes. Otorithm builds AI agents and automated workflows that take over manual work such as document intake, approvals, data entry, reconciliation and support triage. They connect to your systems through typed tools, route low-confidence cases to people, and ship with evals, guardrails and per-task cost tracking.'),
         ('How does Otorithm use AI in its own delivery?', "AI agents draft code, tests, migrations and documentation under the direction of senior engineers. Every change then passes automated tests, eval suites, security scans and review by a named engineer who owns it. Nothing merges on a model's say-so."),
