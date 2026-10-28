@@ -20,6 +20,31 @@ SITE = {
     # particles: the cursor-reactive particle logo drawn over the video.
     'hero_video': {'file': 'structure', 'opacity': 1, 'particles': True},
     'tagline': 'An AI-native engineering consultancy. We build, modernize and run production software with senior engineers and AI throughout our delivery.',
+
+    # --- Search engines and AI assistants ---------------------------------------------
+    # Public profiles that represent Otorithm (LinkedIn company page, Crunchbase, GitHub, Clutch).
+    # They become schema.org `sameAs` links, which let search engines and AI models tie this site
+    # to the same company everywhere it appears. Add the LinkedIn page URL as soon as it is live,
+    # e.g. 'https://www.linkedin.com/company/otorithm/'. The first LinkedIn URL also shows in the footer.
+    'same_as': [],
+    # Verification codes from Google Search Console and Bing Webmaster Tools: paste only the
+    # content="..." value of the meta tag each one gives you. Empty values are left out.
+    'verification': {'google': '', 'bing': ''},
+    # IndexNow (Bing, Yandex, Seznam, Naver; Bing also feeds ChatGPT search and Copilot).
+    # build.py publishes /<key>.txt and the deploy workflow submits every URL after each deploy.
+    # Keep this value stable; any 8 to 128 hexadecimal characters work.
+    'indexnow_key': '85a4f7173d3a3183e177e8ad793d27fb',
+    # Regions named in structured data (schema.org areaServed).
+    'area_served': ['India', 'Europe', 'United Kingdom', 'United States', 'Canada', 'Middle East'],
+    # Topics the company is an authority on (schema.org knowsAbout).
+    'knows_about': [
+        'AI engineering', 'Generative AI', 'AI agents', 'Agentic workflows', 'AI automation',
+        'Large language model applications', 'Retrieval-augmented generation', 'LLM evaluation',
+        'LLMOps', 'Document AI', 'Legacy modernization', 'Application modernization',
+        'Platform engineering', 'Data engineering', 'Event-driven architecture',
+        'Payments engineering', 'Cloud-native architecture', 'Forward-deployed engineering',
+        'Staff augmentation', 'Digital transformation', 'AI governance',
+    ],
 }
 
 # ---------------------------------------------------------------------------
@@ -96,6 +121,8 @@ SERVICE_GROUPS = [
 
 SERVICES = {
     'ai-first-engineering': {
+        'seo_title': 'AI Product Engineering: Agents, Copilots & RAG | Otorithm',
+        'seo_desc': 'AI product engineering for production: AI agents, agentic workflows, copilots, RAG and document AI, shipped with evals, guardrails and cost controls.',
         'name': 'AI-First Product Engineering',
         'nav': 'Agents, copilots and AI features built to run in production.',
         'short': 'Products designed around models from the first sprint: agents, copilots, retrieval and automated workflows, built with evals, guardrails and cost controls.',
@@ -135,6 +162,8 @@ SERVICES = {
         ],
         'models': ['sprint', 'pilot', 'pod'],
         'faqs': [
+            ('What is AI-first product engineering?', 'AI-first product engineering means designing software around what models can do from the first sprint, instead of adding AI to a finished product. At Otorithm it covers AI agents, copilots, retrieval-augmented generation (RAG), document extraction and automated workflows, each shipped with evals, guardrails and cost controls so it stays reliable in production.'),
+            ('Can you automate manual workflows with AI agents?', 'Yes. We build agents that read documents, call your systems through typed tools, complete multi-step tasks such as intake, approvals, reconciliation and support triage, and hand off to people when confidence is low. Each workflow tracks quality and cost per task in production.'),
             ('Which models do you work with?', 'We work with the major frontier model providers and with open-weight models, and choose per task based on quality, latency, cost and where your data is allowed to go. The architecture keeps that choice reversible.'),
             ('Can it run inside our own cloud?', 'Yes. We deploy into your AWS, Azure or GCP accounts and can use private model endpoints or self-hosted open-weight models where data residency requires it.'),
             ('How do you stop the model making things up?', 'Grounding in your own data, constrained outputs, citations the user can check, confidence thresholds and human review for the cases that matter. The eval suite measures how often each of these holds.'),
@@ -143,6 +172,8 @@ SERVICES = {
         'related': ['legacy-modernization', 'forward-deployed-engineering'],
     },
     'forward-deployed-engineering': {
+        'seo_title': 'Forward-Deployed Engineering Services | Otorithm',
+        'seo_desc': 'Forward-deployed engineers embedded in your business: a senior pod that owns an outcome end to end and takes AI pilots and workflows into production.',
         'name': 'Forward-Deployed Engineering',
         'nav': 'Senior engineers embedded in your business, accountable for an outcome.',
         'short': 'Senior engineers embedded in your business who own a problem end to end, from the first conversation with users to the system running in production.',
@@ -182,6 +213,7 @@ SERVICES = {
         ],
         'models': ['pod', 'pilot'],
         'faqs': [
+            ('What is forward-deployed engineering?', "Forward-deployed engineering is a delivery model in which a small team of senior engineers works inside the client's organization, next to the people who have the problem, and owns it end to end: scoping, building, integrating and running the software until it works in production. It grew out of companies that deploy complex software into their customers' organizations, and it is now a common way to take AI pilots into production."),
             ('How is this different from staff augmentation?', 'Staff augmentation adds engineers to your plan, managed by your leads. A forward-deployed pod owns an outcome: we frame the problem, decide how to solve it with you, and are accountable for the result.'),
             ('What does a pod look like?', 'Usually two to four engineers, led by a senior engineer who is your single point of accountability, with an architect available as the work needs.'),
             ('Do engineers need to be on site?', 'Some of the most valuable time is on site, especially in the first weeks. After that most pods work remotely with regular on-site days, depending on the problem and your location.'),
@@ -190,6 +222,8 @@ SERVICES = {
         'related': ['ai-first-engineering', 'staff-augmentation'],
     },
     'legacy-modernization': {
+        'seo_title': 'AI Legacy Modernization & Process Automation | Otorithm',
+        'seo_desc': 'Modernize legacy systems and paper, email and spreadsheet workflows with AI: business-rule recovery, document AI and step-by-step migration.',
         'name': 'AI Modernization of Legacy Workflows',
         'nav': 'Digitize manual processes and replace legacy systems step by step.',
         'short': 'Digitize paper, email and spreadsheet processes and modernize the legacy systems behind them, using AI to read old code, recover business rules and automate the work.',
@@ -229,6 +263,7 @@ SERVICES = {
         ],
         'models': ['sprint', 'pilot', 'pod'],
         'faqs': [
+            ('What is AI modernization of legacy workflows?', 'It is modernizing legacy systems and manual processes with AI doing much of the heavy lifting: reading old code to recover business rules, generating characterization tests, turning paper and email into structured data, and automating steps people do by hand. Systems are replaced one capability at a time, so the business keeps running.'),
             ('Do we have to stop using the old system?', 'No. We replace it one capability at a time, and old and new run side by side until the new one has proven itself.'),
             ('Our system is COBOL, VB6 or an old Java stack. Is that a problem?', 'No. AI-assisted comprehension works across older languages, and our engineers verify what it finds. The target stack is chosen with you.'),
             ('Can you work with scanned and handwritten documents?', 'Yes. Extraction quality varies by document type, so we measure it on a sample of your real documents during the assessment before committing to a target.'),
@@ -237,6 +272,8 @@ SERVICES = {
         'related': ['platform-engineering', 'ai-consulting'],
     },
     'platform-engineering': {
+        'seo_title': 'Platform & Data Engineering Services | Otorithm',
+        'seo_desc': 'Cloud-native, event-driven, multi-tenant SaaS, payments and data platforms engineered for scale, reliability and AI workloads.',
         'name': 'Platform & Data Engineering',
         'nav': 'Cloud-native, event-driven, payments and data platforms built for scale.',
         'short': 'Cloud-native platforms, event-driven systems, payments and data infrastructure that stay reliable at scale and are ready for AI workloads.',
@@ -276,6 +313,7 @@ SERVICES = {
         ],
         'models': ['sprint', 'pod', 'extension'],
         'faqs': [
+            ('What does platform and data engineering cover?', 'The systems a business runs on: cloud-native backends, event-driven architecture and streaming, multi-tenant SaaS, payments and ledgers, data pipelines and warehouses, and the reliability practices (SLOs, observability, recovery drills) that keep them up at scale. It also covers getting data and infrastructure ready for AI workloads.'),
             ('Which clouds and stacks do you work with?', 'AWS, Azure and GCP; Java and Spring Boot, Node.js, Go and Python; Kafka, PostgreSQL, ClickHouse, Redis and the major warehouses. We work in your stack before proposing a new one.'),
             ('Can you take over an existing platform?', 'Yes. We start with a review and a short shadowing period, then take on changes and operations in stages.'),
             ('Do you do cost optimization?', 'Yes. Architecture reviews usually find savings in compute, storage and data transfer, and we size them before recommending changes.'),
@@ -284,6 +322,8 @@ SERVICES = {
         'related': ['legacy-modernization', 'staff-augmentation'],
     },
     'ai-consulting': {
+        'seo_title': 'AI Strategy & Consulting Services | Otorithm',
+        'seo_desc': 'AI consulting from engineers: readiness assessments, scored use-case portfolios, EU AI Act-aligned governance and embedded delivery of the first builds.',
         'name': 'AI Strategy & Deployed Consulting',
         'nav': 'Consultants inside your organization, from AI roadmap to first builds.',
         'short': 'Consultants who work inside your organization to decide where AI pays off, put the governance in place to use it safely, and stay through delivery.',
@@ -323,6 +363,7 @@ SERVICES = {
         ],
         'models': ['sprint', 'advisory'],
         'faqs': [
+            ('What is deployed AI consulting?', 'AI consulting delivered by engineers who work inside your organization: they assess readiness, score use cases by value, feasibility and risk, set up governance aligned with the EU AI Act, GDPR and DPDP, and stay embedded to run the first builds. The goal is running systems, not a slide deck.'),
             ('Is this a one-off assessment?', 'It can be. Many clients keep a consultant embedded part-time after the assessment to steer delivery and adjust the plan.'),
             ('Do you resell AI platforms?', 'No. We have no reseller arrangements, so recommendations follow your requirements.'),
             ('Who will we work with?', 'Senior engineers and architects with delivery experience, supported by specialists in data, security and compliance as needed.'),
@@ -331,6 +372,8 @@ SERVICES = {
         'related': ['ai-first-engineering', 'forward-deployed-engineering'],
     },
     'staff-augmentation': {
+        'seo_title': 'Staff Augmentation: Senior Engineers from India | Otorithm',
+        'seo_desc': 'Vetted senior backend, AI, data, frontend and platform engineers who join your team on monthly terms, with working-hour overlap for Europe and the US.',
         'name': 'Staff Augmentation',
         'nav': 'Vetted senior engineers who join your team and work to your plan.',
         'short': 'Senior engineers who join your team, your tools and your rituals, with the AI-assisted habits that make them productive from the first sprint.',
@@ -370,6 +413,7 @@ SERVICES = {
         ],
         'models': ['extension', 'pod'],
         'faqs': [
+            ('What is staff augmentation?', 'Staff augmentation is adding external engineers to your own team on a monthly basis. They work in your repositories and rituals and report to your leads, while the provider handles vetting, onboarding, replacement and quality checks. Otorithm places senior engineers only, trained to work with AI coding tools within your policies.'),
             ('How quickly can someone start?', 'Typically two to four weeks from the brief, depending on seniority and your interview process.'),
             ('Can we hire an engineer permanently?', 'Yes, after an agreed minimum period, with a conversion fee set in the contract.'),
             ('What time zones do your engineers cover?', 'Our engineers work from India. They overlap most of the working day with Europe and keep agreed overlap hours with North America, typically three to four hours.'),
@@ -406,6 +450,16 @@ HOME = {
     'diff_label': 'How we are different',
     'diff_title': 'AI is in how we work, not only in what we build.',
     'diff_body': 'Most firms add AI to the product and keep delivering the old way. We rebuilt our delivery around it. Agents draft, test and document under the direction of senior engineers, and every output passes the same review gates as hand-written work. You get the speed of AI with an engineer accountable for every change.',
+    'faq': [
+        ('What is Otorithm?', 'Otorithm is an AI-native software engineering consultancy headquartered in Gurugram, India. It designs, builds and modernizes production software for product companies and enterprises in India, Europe and North America, with senior engineers leading every engagement and AI used throughout delivery. Otorithm is a brand of System One Technologies Private Limited.'),
+        ('What services does Otorithm offer?', 'Six services in three groups. Build: AI-First Product Engineering and Platform & Data Engineering. Transform: AI Modernization of Legacy Workflows and AI Strategy & Deployed Consulting. Extend: Forward-Deployed Engineering and Staff Augmentation.'),
+        ('Does Otorithm build AI automation and AI agents?', 'Yes. Otorithm builds AI agents and automated workflows that take over manual work such as document intake, approvals, data entry, reconciliation and support triage. They connect to your systems through typed tools, route low-confidence cases to people, and ship with evals, guardrails and per-task cost tracking.'),
+        ('How does Otorithm use AI in its own delivery?', "AI agents draft code, tests, migrations and documentation under the direction of senior engineers. Every change then passes automated tests, eval suites, security scans and review by a named engineer who owns it. Nothing merges on a model's say-so."),
+        ('What is the difference between forward-deployed engineering and staff augmentation?', 'Ownership. Staff augmentation adds senior engineers to your plan, managed by your leads. A forward-deployed pod owns an outcome: it frames the problem with your operators, builds and integrates the solution, and is accountable for the result in production.'),
+        ('How do engagements with Otorithm start, and how are they priced?', 'Most start small: a fixed-fee readiness sprint of 2 to 3 weeks, or a fixed-scope pilot to production of 4 to 10 weeks. Ongoing work is billed monthly as a forward-deployed pod, a team extension per engineer or embedded advisory, without long lock-ins. Pricing is quoted per engagement after a short scoping call.'),
+        ('Which industries does Otorithm work with?', 'Fintech and payments, banking and financial services, marketplaces and e-commerce, B2B SaaS, logistics and supply chain, and healthcare operations: businesses where correctness, scale and audit trails matter.'),
+        ('Who owns the code and data?', "You do. Code lands in your repositories, systems run in your cloud accounts, and model accounts are yours from day one. Client data is never used to train models, enterprise model APIs with zero data retention are the default, and every contract includes NDAs and IP assignment. Data processing follows GDPR and India's DPDP Act."),
+    ],
     'why': [
         ('Senior engineers only', 'Every engineer we deploy has shipped and run production systems. Nobody learns the basics on your time.'),
         ('Payments-grade engineering', 'Our engineers have built and run payments and monetisation platforms at global marketplace scale, so we design for audit trails, idempotency and failure from day one.'),
@@ -650,6 +704,10 @@ CAREERS = {
 ARTICLES = [
     {
         'slug': 'forward-deployed-engineering-vs-staff-augmentation',
+        'published': '2026-10-01',
+        'updated': '2026-10-28',
+        'takeaways': ['Staff augmentation adds capacity to a plan you own; forward-deployed engineering hands a team ownership of a problem.', 'Choose augmentation when you know exactly what to build and have leads with time to direct the work.', 'Choose a forward-deployed pod when the problem is clear but the solution is not, or the work crosses teams and systems.', 'Compare cost per outcome, not rate per engineer: augmentation needs your management time, a pod brings its own lead.'],
+        'keywords': ['forward-deployed engineering', 'staff augmentation', 'engagement models', 'AI pilots'],
         'title': 'Forward-deployed engineering or staff augmentation? How to choose',
         'summary': 'Both put outside engineers in your team. The difference is who owns the outcome, and that decides which one you need.',
         'topic': 'Engagement models',
@@ -691,6 +749,10 @@ ARTICLES = [
     },
     {
         'slug': 'modernizing-legacy-workflows-with-ai',
+        'published': '2026-10-01',
+        'updated': '2026-10-28',
+        'takeaways': ['Modernization programmes fail on missing knowledge, not on technology: the old system holds rules nobody wrote down.', 'Use AI to draft a catalogue of business rules from the code, and have domain experts confirm each one.', "Pin today's behaviour with characterization tests before changing anything.", 'Replace one capability at a time behind a facade, running old and new in parallel until outputs reconcile.'],
+        'keywords': ['legacy modernization', 'AI', 'business rules', 'document AI', 'characterization tests'],
         'title': 'Modernizing legacy workflows with AI: start with the business rules',
         'summary': 'Most modernization programmes fail on knowledge, not technology. AI changes the economics of recovering what the old system knows.',
         'topic': 'Modernization',
@@ -730,6 +792,10 @@ ARTICLES = [
     },
     {
         'slug': 'evals-before-demos',
+        'published': '2026-10-01',
+        'updated': '2026-10-28',
+        'takeaways': ['A demo shows the best cases; production sees all of them. Agree the test set and pass mark before building.', 'Grade automatically where possible, calibrate model graders against human ratings, and keep sampling by hand.', 'Run the eval suite in CI on every change to prompts, retrieval, models or code, and block regressions.', 'Evals turn model choice into a measured engineering decision and outlive any single model.'],
+        'keywords': ['LLM evals', 'AI engineering', 'LLMOps', 'AI in production'],
         'title': 'Evals before demos: how we take AI features to production',
         'summary': 'A demo shows the best cases. Production sees all of them. An eval suite is how you know which one you have built.',
         'topic': 'AI engineering',
